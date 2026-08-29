@@ -1,0 +1,83 @@
+/**
+ * Tuning constants. Every balance-affecting number lives here so the game can
+ * be re-tuned without touching logic, and so tests can assert against it.
+ */
+
+export const WORLD = {
+  /** Half-width of the region the player may occupy. */
+  boundX: 12,
+  /** Half-height of the region the player may occupy. */
+  boundY: 7,
+  /** Z plane the camera sits on; the player hovers just in front of it. */
+  playerZ: 0,
+  /** Enemies materialise here. */
+  spawnZ: -190,
+  /** Anything past this is recycled. */
+  despawnZ: 26,
+  /** Player bullets die here. */
+  bulletLifeZ: -210,
+} as const;
+
+export const PLAYER = {
+  startShields: 3,
+  maxShields: 5,
+  /** Top speed in world units/sec at full tilt deflection. */
+  maxSpeed: 30,
+  accel: 42,
+  drag: 6,
+  /** Seconds of invulnerability after taking a hit. */
+  invulnTime: 1.6,
+  fireInterval: 0.135,
+  bulletSpeed: 150,
+  bulletRadius: 0.55,
+  hullRadius: 1.35,
+  maxWeaponLevel: 4,
+  /** Seconds of Nova (invulnerable + autofire sweep) from a pickup. */
+  novaDuration: 6,
+} as const;
+
+export const ENEMY = {
+  grunt: { hp: 2, radius: 1.7, speed: 26, score: 100, fireCooldown: [1.4, 2.6] },
+  darter: { hp: 1, radius: 1.35, speed: 42, score: 150, fireCooldown: [2.4, 4.2] },
+  tank: { hp: 7, radius: 2.5, speed: 15, score: 300, fireCooldown: [1.1, 1.9] },
+  boss: { hp: 220, radius: 7.5, speed: 9, score: 5000, fireCooldown: [0.55, 0.8] },
+} as const;
+
+export const ENEMY_BULLET = {
+  speed: 46,
+  radius: 0.62,
+} as const;
+
+export const PICKUP = {
+  speed: 20,
+  radius: 1.5,
+  /** Chance an enemy death drops something at all. */
+  dropChance: 0.13,
+  /** Guaranteed drop chance for tanks, which feel bad to kill for nothing. */
+  tankDropChance: 0.45,
+  weights: { weapon: 0.5, shield: 0.32, nova: 0.18 },
+} as const;
+
+export const SCORING = {
+  /** Consecutive kills without taking a hit bump the multiplier. */
+  comboStep: 0.25,
+  comboMax: 8,
+  /** Combo decays after this many seconds without a kill. */
+  comboTimeout: 3.5,
+} as const;
+
+export const WAVES = {
+  /** Seconds per wave. */
+  duration: 22,
+  baseInterval: 1.15,
+  minInterval: 0.32,
+  speedScalePerWave: 0.07,
+  maxSpeedScale: 2.3,
+  /** A boss leads every Nth wave. */
+  bossEveryNthWave: 5,
+  /** Cap on simultaneously alive non-boss enemies. */
+  maxAlive: 22,
+} as const;
+
+export const FIXED_DT = 1 / 120;
+export const MAX_FRAME_DT = 0.05;

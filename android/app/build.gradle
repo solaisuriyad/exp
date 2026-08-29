@@ -1,0 +1,96 @@
+apply plugin: 'com.android.application'
+
+/**
+ * Release signing.
+ *
+ * Credentials come from `keystore.properties` (git-ignored) or from environment
+ * variables, so CI can sign without a secret ever landing in the repo. If
+ * neither is present the release build is produced unsigned — still installable
+ * with `adb install` after `apksigner`, and the debug build always works.
+ */
+def keystorePropertiesFile = rootProject.file('keystore.properties')
+def keystoreProperties = new Properties()
+def hasKeystoreFile = keystorePropertiesFile.exists()
+if (hasKeystoreFile) {
+    keystorePropertiesFile.withInputStream { stream -> keystoreProperties.load(stream) }
+}
+
+def storeFilePath = keystoreProperties['storeFile'] ?: System.getenv('SF_STORE_FILE')
+def storePassword = keystoreProperties['storePassword'] ?: System.getenv('SF_STORE_PASSWORD')
+def keyAlias = keystoreProperties['keyAlias'] ?: System.getenv('SF_KEY_ALIAS')
+def keyPassword = keystoreProperties['keyPassword'] ?: System.getenv('SF_KEY_PASSWORD')
+def canSignRelease = storeFilePath && storePassword && keyAlias && keyPassword &&
+        file(storeFilePath).exists()
+
+android {
+    namespace = "com.starfall.vector"
+    compileSdk = rootProject.ext.compileSdkVersion
+    defaultConfig {
+        applicationId "com.starfall.vector"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode Integer.parseInt(System.getenv('SF_VERSION_CODE') ?: '1')
+        versionName System.getenv('SF_VERSION_NAME') ?: "1.0"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        aaptOptions {
+             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+            ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+
+    signingConfigs {
+        if (canSignRelease) {
+            release {
+                storeFile file(storeFilePath)
+                storePassword storePassword
+                keyAlias keyAlias
+                keyPassword keyPassword
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            if (canSignRelease) {
+                signingConfig signingConfigs.release
+            }
+        }
+    }
+}
+
+if (!canSignRelease) {
+    logger.lifecycle('[starfall] No release keystore found — assembleRelease will be UNSIGNED. ' +
+            'Add keystore.properties (see keystore.properties.example) to produce a signed APK.')
+}
+
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation project(':capacitor-android')
+    testImplementation "junit:junit:$junitVersion"
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    implementation project(':capacitor-cordova-android-plugins')
+}
+
+apply from: 'capacitor.build.gradle'
+
+try {
+    def servicesJSON = file('google-services.json')
+    if (servicesJSON.text) {
+        apply plugin: 'com.google.gms.google-services'
+    }
+} catch(Exception e) {
+    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+}

@@ -1,0 +1,26 @@
+node_modules/
+dist/
+dist-ssr/
+coverage/
+*.local
+.DS_Store
+.vite/
+.eslintcache
+*.log
+npm-debug.log*
+
+# Android build output (Gradle). The project itself IS committed;
+# only generated artifacts are ignored.
+android/.gradle/
+android/build/
+android/app/build/
+android/app/release/
+android/local.properties
+android/captures/
+*.apk
+*.aab
+*.keystore
+!android/gradle/wrapper/gradle-wrapper.jar
+
+# Release signing config — never commit secrets.
+keystore.properties

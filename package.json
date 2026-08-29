@@ -1,0 +1,43 @@
+{
+  "name": "starfall-vector",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Starfall Vector — a tilt-controlled 3D space shooter for Android, built with Three.js and wrapped with Capacitor.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0 --port 5173",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --host 0.0.0.0 --port 4173",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:smoke": "node tests/smoke/run-smoke.mjs",
+    "lint": "eslint src tests --max-warnings 0",
+    "android:sync": "npm run build && cap sync android",
+    "android:open": "cap open android",
+    "android:apk": "npm run build && cap sync android && cd android && ./gradlew assembleDebug",
+    "assets:generate": "node mobile/generate-assets.mjs"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.5.0",
+    "@capacitor/app": "^8.0.0",
+    "@capacitor/core": "^8.5.0",
+    "@capacitor/haptics": "^8.0.0",
+    "@capacitor/status-bar": "^8.0.0",
+    "three": "^0.185.1"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.5.0",
+    "@eslint/js": "^9.39.5",
+    "@types/node": "^22.10.2",
+    "@types/three": "^0.185.0",
+    "@vitest/coverage-v8": "^3.2.4",
+    "eslint": "^9.17.0",
+    "playwright": "^1.49.1",
+    "sharp": "^0.35.4",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.18.2",
+    "vite": "^8.2.2",
+    "vitest": "^3.2.4"
+  }
+}
