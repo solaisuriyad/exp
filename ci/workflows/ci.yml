@@ -1,3 +1,9 @@
+# NOTE: this pipeline ships outside .github/workflows because the current GitHub
+# App token lacks the `workflows` write permission. To activate it, either
+#   cp ci/workflows/<this-file> .github/workflows/   and push from an account
+#   with workflow permissions, or paste it in via the GitHub web UI under
+#   Settings/Actions. Everything below is unchanged.
+
 name: CI
 
 on:

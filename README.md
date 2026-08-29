@@ -51,11 +51,21 @@ Without a keystore, `assembleRelease` still produces an APK — unsigned, which
 
 ### GitHub Actions (canonical pipeline)
 
-The `.github/workflows/android-apk.yml` workflow builds **debug + release APKs**
-on every `v*.*.*` tag or via `gh workflow run android-apk.yml`, and attaches the
-APKs to the GitHub Release. Give it signing secrets and release builds are signed
-on CI; otherwise the debug APK (already signed with the Android debug key) is
-directly installable.
+The ready-to-use pipelines live in `ci/workflows/` (this session's GitHub token is
+not allowed to write `.github/workflows/`). Activate them once with:
+
+```bash
+mkdir -p .github/workflows && cp ci/workflows/*.yml .github/workflows/
+git add .github && git commit -m "ci: enable pipelines" && git push
+```
+
+`android-apk.yml` then builds **debug + release APKs** on every `v*.*.*` tag or
+via `gh workflow run android-apk.yml`, and attaches the APKs to the GitHub
+Release. Give it signing secrets (`SF_KEYSTORE_BASE64`, `SF_STORE_PASSWORD`,
+`SF_KEY_ALIAS`, `SF_KEY_PASSWORD`) and release builds are signed on CI; without
+them the debug APK (signed with the Android debug key) is directly installable.
+`ci.yml` runs lint, typecheck, unit tests, the build and a headless-browser
+smoke test on every push.
 
 ## Project layout
 
