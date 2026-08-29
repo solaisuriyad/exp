@@ -18,7 +18,7 @@ const el = (tag: string, cls: string, parent?: HTMLElement): HTMLElement => {
 };
 
 const btn = (cls: string, parent: HTMLElement): HTMLButtonElement =>
-  btn(cls, parent) as HTMLButtonElement;
+  el('button', cls, parent) as HTMLButtonElement;
 
 export interface UiHandlers {
   onStart: () => void;
