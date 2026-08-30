@@ -25,11 +25,14 @@ export interface SpawnRequest {
  * Deterministic given the Rng.
  */
 export const pickKind = (rng: Rng, diff: DifficultySnapshot): EnemyKind => {
-  const total = diff.mix.grunt + diff.mix.darter + diff.mix.tank;
+  const m = diff.mix;
+  const total = m.grunt + m.stinger + m.darter + m.tank + m.mine;
   const r = rng.next() * total;
-  if (r < diff.mix.grunt) return 'grunt';
-  if (r < diff.mix.grunt + diff.mix.darter) return 'darter';
-  return 'tank';
+  if (r < m.grunt) return 'grunt';
+  if (r < m.grunt + m.stinger) return 'stinger';
+  if (r < m.grunt + m.stinger + m.darter) return 'darter';
+  if (r < m.grunt + m.stinger + m.darter + m.tank) return 'tank';
+  return 'mine';
 };
 
 /**
@@ -55,6 +58,7 @@ export const makeSpawn = (rng: Rng, kind: EnemyKind, diff: DifficultySnapshot): 
     kind === 'grunt' ? rng.range(2.5, 6)
     : kind === 'darter' ? rng.range(1.5, 3.5)
     : kind === 'tank' ? rng.range(1.2, 2.6)
+    : kind === 'stinger' ? rng.range(2.5, 4.5)
     : 0;
 
   return {

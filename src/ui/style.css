@@ -737,3 +737,43 @@ canvas#gl {
   border-radius: 14px;
   animation: novaPulse 0.5s ease-in-out infinite alternate;
 }
+
+/* ------------------------------------------------------- upgrade draft */
+
+.upgrade-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.upgrade-card {
+  text-align: left;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--stroke);
+  background: rgba(100, 245, 255, 0.05);
+  cursor: pointer;
+  transition: transform 0.12s, box-shadow 0.2s, background 0.2s;
+}
+
+.upgrade-card:hover {
+  background: rgba(100, 245, 255, 0.12);
+  box-shadow: 0 0 22px rgba(100, 245, 255, 0.25);
+}
+
+.upgrade-card:active { transform: scale(0.98); }
+
+.upgrade-name {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  color: var(--accent);
+  margin-bottom: 4px;
+}
+
+.upgrade-desc {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--dim);
+}

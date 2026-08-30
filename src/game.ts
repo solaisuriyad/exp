@@ -2,6 +2,7 @@ import { AudioEngine } from './audio/synth.js';
 import {
   AIMLOCK,
   ENEMY_BULLET,
+  MINE_BURST,
   FIXED_DT,
   GUARD,
   MAX_FRAME_DT,
@@ -29,6 +30,7 @@ import type {
   ControlMode,
   GameState,
   InputFrame,
+  UpgradeChoice,
 } from './core/types.js';
 import {
   createBullet,
@@ -57,6 +59,7 @@ import {
   type DifficultySnapshot,
 } from './systems/difficulty.js';
 import { POWERFUL_KINDS, selectLockTarget } from './systems/lock.js';
+import { rollUpgradeOffer, upgradeById, type UpgradeDef } from './systems/upgrades.js';
 import { Scoring } from './systems/scoring.js';
 import {
   formationV,
@@ -75,6 +78,7 @@ export interface GameEvents {
   onGameOver?: (r: RunSummary) => void;
   onControlMode?: (mode: ControlMode) => void;
   onCountdown?: (n: number) => void;
+  onUpgrades?: (wave: number, choices: UpgradeChoice[]) => void;
 }
 
 export interface HudSnapshot {
@@ -159,6 +163,7 @@ export class Game {
   private disposed = false;
   private lock: EnemyT | null = null;
   private powerQueued = false;
+  private upgradeOffer: UpgradeDef[] = [];
 
   constructor(canvas: HTMLCanvasElement, events: GameEvents = {}, seed?: number) {
     this.canvas = canvas;
@@ -429,6 +434,33 @@ export class Game {
     this.setState('menu');
   }
 
+  /** Level complete: pause the run and draft three upgrades. */
+  private offerUpgrades(): void {
+    this.upgradeOffer = rollUpgradeOffer(this.rng, this.player);
+    if (this.upgradeOffer.length === 0) return;
+    this.setState('upgrade');
+    this.events.onUpgrades?.(
+      this.wave,
+      this.upgradeOffer.map(({ id, name, desc }) => ({ id, name, desc })),
+    );
+  }
+
+  pickUpgrade(id: string): void {
+    if (this.state !== 'upgrade') return;
+    const def = upgradeById(id);
+    if (def && this.upgradeOffer.some((u) => u.id === id)) {
+      def.apply(this.player);
+      this.events.onToast?.(def.name, 'good');
+      this.audio.pickup();
+    }
+    this.upgradeOffer = [];
+    // A beat of invulnerability so the resumed swarm cannot cheap-shot you.
+    this.player.invuln = Math.max(this.player.invuln, 1);
+    this.setState('playing');
+    this.events.onToast?.(`WAVE ${this.wave}`, 'info');
+    if (isBossWave(this.wave) && !(this.boss && this.boss.alive)) this.spawnBoss();
+  }
+
   private preCalibration: GameState = 'menu';
 
   enterCalibration(): void {
@@ -527,8 +559,12 @@ export class Game {
       this.diff = difficultyForWave(this.wave);
       this.events.onWave?.(this.wave);
       this.audio.waveStart();
-      this.events.onToast?.(`WAVE ${this.wave}`, 'info');
-      if (isBossWave(this.wave)) this.spawnBoss();
+      this.offerUpgrades();
+      if (this.state !== 'upgrade') {
+        // No applicable upgrades left: roll straight into the next level.
+        this.events.onToast?.(`WAVE ${this.wave}`, 'info');
+        if (isBossWave(this.wave)) this.spawnBoss();
+      }
     }
 
     this.player.update(dt, input.x, input.y);
@@ -565,7 +601,7 @@ export class Game {
     if (!input.fireHeld) return;
     if (this.player.fireCooldown > 0) return;
 
-    this.player.fireCooldown = PLAYER.fireInterval / (this.player.nova > 0 ? 1.8 : 1);
+    this.player.fireCooldown = this.player.fireInterval / (this.player.nova > 0 ? 1.8 : 1);
     const offsets = this.player.muzzleOffsets();
     for (const o of offsets) {
       const b = this.bullets.obtain();
@@ -822,7 +858,7 @@ export class Game {
     const arr = this.enemies.active;
     for (let i = arr.length - 1; i >= 0; i--) {
       const e = arr[i]!;
-      updateEnemy(e, dt, this.elapsed);
+      updateEnemy(e, dt, this.elapsed, this.player);
 
       // Firing.
       e.fireTimer -= dt;
@@ -833,8 +869,16 @@ export class Game {
           e.patternTimer += 1;
           if (e.patternTimer % 6 === 0) e.pattern = (e.pattern + 1) % 3;
           this.fireBossPattern(e);
-        } else if (this.player.alive && this.rng.chance(e.kind === 'tank' ? 0.85 : 0.6)) {
-          if (sk === 'spread') {
+        } else if (
+          sk !== 'none' &&
+          this.player.alive &&
+          this.rng.chance(e.kind === 'tank' ? 0.85 : 0.6)
+        ) {
+          if (sk === 'twin') {
+            // Stingers rake with two parallel shots.
+            this.fireEnemyShot(e, this.player.x - 1.1, this.player.y);
+            this.fireEnemyShot(e, this.player.x + 1.1, this.player.y);
+          } else if (sk === 'spread') {
             // Darters fan a 3-way spread.
             for (const a of [-0.24, 0, 0.24]) {
               this.fireEnemyShot(e, this.player.x, this.player.y, { angleY: a });
@@ -865,7 +909,7 @@ export class Game {
       p.z += p.vz * dt;
       // Gentle attraction when close, so pickups feel fair.
       const dz = Math.abs(p.z - this.player.z);
-      if (dz < 16) {
+      if (dz < this.player.magnetRange) {
         p.x += (this.player.x - p.x) * Math.min(1, dt * 2.2);
         p.y += (this.player.y - p.y) * Math.min(1, dt * 2.2);
       }
@@ -1014,6 +1058,27 @@ export class Game {
     void primaryIndex;
   }
 
+  /** Mines detonate into a radial shard burst — shooting them up close is risky. */
+  private mineBurst(e: EnemyT): void {
+    for (let i = 0; i < MINE_BURST.shards; i++) {
+      const a = (i / MINE_BURST.shards) * Math.PI * 2;
+      const b = this.bullets.obtain();
+      if (!b) break;
+      b.alive = true;
+      b.faction = 1;
+      b.x = e.x;
+      b.y = e.y;
+      b.z = e.z;
+      b.vx = Math.cos(a) * MINE_BURST.speed;
+      b.vy = Math.sin(a) * MINE_BURST.speed;
+      b.vz = MINE_BURST.vz;
+      b.radius = 0.55;
+      b.damage = 1;
+      b.mesh = this.renderer.obtainBulletMesh('enemy');
+    }
+    this.audio.enemyShoot();
+  }
+
   private killEnemy(index: number, exploded: boolean): void {
     const arr = this.enemies.active;
     const e = arr[index];
@@ -1021,6 +1086,7 @@ export class Game {
 
     if (exploded) {
       const big = e.kind === 'boss' || e.kind === 'tank';
+      if (e.kind === 'mine') this.mineBurst(e);
       this.explode(e.x, e.y, e.z, big ? 1.8 : 1, colorFor(e.kind));
       this.scoring.addKill(e.score);
       this.shake.kick(big ? 0.55 : 0.16);
@@ -1196,9 +1262,9 @@ export class Game {
       controlMode: this.lastControlMode,
       fps: this.fps,
       powerCharges: this.player.powerCharges,
-      powerMax: POWER_WEAPON.charges,
+      powerMax: this.player.powerMax,
       powerRechargeFrac:
-        this.player.powerCharges < POWER_WEAPON.charges
+        this.player.powerCharges < this.player.powerMax
           ? this.player.powerRecharge / POWER_WEAPON.rechargeInterval
           : 0,
       guardTime: this.player.guard,
@@ -1249,7 +1315,11 @@ export const colorFor = (kind: EnemyT['kind']): number =>
       ? 0xff49c8
       : kind === 'tank'
         ? 0xffa23a
-        : 0xb44dff;
+        : kind === 'stinger'
+          ? 0x62ff8a
+          : kind === 'mine'
+            ? 0xffd23a
+            : 0xb44dff;
 
 export const colorForPickup = (kind: Pickup['kind']): number =>
   kind === 'weapon'

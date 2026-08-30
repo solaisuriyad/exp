@@ -8,9 +8,10 @@ export type GameState =
   | 'countdown'
   | 'playing'
   | 'paused'
+  | 'upgrade'
   | 'gameover';
 
-export type EnemyKind = 'grunt' | 'darter' | 'tank' | 'boss';
+export type EnemyKind = 'grunt' | 'darter' | 'tank' | 'boss' | 'stinger' | 'mine';
 
 export type PickupKind = 'weapon' | 'shield' | 'nova' | 'aegis';
 
@@ -33,6 +34,12 @@ export interface InputFrame {
   /** Raw signed degrees, for the calibration HUD. */
   rawTiltX: number;
   rawTiltY: number;
+}
+
+export interface UpgradeChoice {
+  id: string;
+  name: string;
+  desc: string;
 }
 
 export const EMPTY_INPUT: InputFrame = {

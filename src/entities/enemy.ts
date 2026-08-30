@@ -77,7 +77,12 @@ export const resetEnemy = (e: Enemy): void => {
  * cut hard diagonals, tanks advance slowly while sweeping side to side, and the
  * boss strafes across the top of the screen on a sinusoid.
  */
-export const updateEnemy = (e: Enemy, dt: number, elapsed: number): void => {
+export const updateEnemy = (
+  e: Enemy,
+  dt: number,
+  elapsed: number,
+  target?: { x: number; y: number },
+): void => {
   e.age += dt;
   switch (e.kind) {
     case 'grunt': {
@@ -96,6 +101,23 @@ export const updateEnemy = (e: Enemy, dt: number, elapsed: number): void => {
       e.x += Math.sin(e.phase + elapsed * 0.55) * e.weave * 2.2 * dt;
       break;
     }
+    case 'stinger': {
+      // Fast rusher carving a hard figure-eight.
+      e.z += e.vz * dt;
+      e.x += Math.sin(e.phase + elapsed * 2.6) * e.weave * 2.4 * dt;
+      e.y += Math.cos(e.phase * 1.7 + elapsed * 3.1) * e.weave * 1.6 * dt;
+      break;
+    }
+    case 'mine': {
+      // Slow drifter that homes lazily on the player's lane.
+      e.z += e.vz * dt;
+      if (target) {
+        const pull = 6;
+        e.x += Math.sign(target.x - e.x) * Math.min(Math.abs(target.x - e.x), pull * dt);
+        e.y += Math.sign(target.y - e.y) * Math.min(Math.abs(target.y - e.y), pull * dt);
+      }
+      break;
+    }
     case 'boss': {
       // Hold station just inside the playfield, strafing the full width.
       const targetZ = -58;
@@ -112,10 +134,20 @@ export const updateEnemy = (e: Enemy, dt: number, elapsed: number): void => {
  * fan a 3-way spread, tanks lob slow *powerful* mortars and bosses run their
  * pattern cycle with powerful fire.
  */
-export type ShotKind = 'aim' | 'spread' | 'heavy' | 'boss';
+export type ShotKind = 'aim' | 'spread' | 'heavy' | 'boss' | 'twin' | 'none';
 
 export const shotKindFor = (kind: EnemyKind): ShotKind =>
-  kind === 'grunt' ? 'aim' : kind === 'darter' ? 'spread' : kind === 'tank' ? 'heavy' : 'boss';
+  kind === 'grunt'
+    ? 'aim'
+    : kind === 'darter'
+      ? 'spread'
+      : kind === 'tank'
+        ? 'heavy'
+        : kind === 'stinger'
+          ? 'twin'
+          : kind === 'mine'
+            ? 'none'
+            : 'boss';
 
 /** Powerful opponents: the aim-lock engages on these, and their hits erode AEGIS. */
 export const isPowerfulShooter = (kind: EnemyKind): boolean =>

@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { GUARD, POWER_WEAPON, SHIPS } from '../src/core/config.js';
-import { isPowerfulShooter, shotKindFor } from '../src/entities/enemy.js';
+import {
+  createEnemy,
+  isPowerfulShooter,
+  resetEnemy,
+  shotKindFor,
+  updateEnemy,
+} from '../src/entities/enemy.js';
+import { difficultyForWave } from '../src/systems/difficulty.js';
 import { Player } from '../src/entities/player.js';
 import { selectLockTarget, POWERFUL_KINDS, type Lockable } from '../src/systems/lock.js';
 
@@ -216,5 +223,62 @@ describe('aim-lock target selection', () => {
 
   it('returns null for an empty field', () => {
     expect(selectLockTarget([], POWERFUL_KINDS, 0, 0, 0, 240)).toBeNull();
+  });
+});
+
+describe('new enemy archetypes', () => {
+  it('stingers fire twin shots and mines never fire', () => {
+    expect(shotKindFor('stinger')).toBe('twin');
+    expect(shotKindFor('mine')).toBe('none');
+  });
+
+  it('mines home toward the player lane while drifting in', () => {
+    const e = createEnemy();
+    resetEnemy(e);
+    e.alive = true;
+    e.kind = 'mine';
+    e.x = 8;
+    e.y = -4;
+    e.z = -100;
+    e.vz = 12;
+    for (let i = 0; i < 240; i++) updateEnemy(e, 1 / 120, i / 120, { x: 0, y: 0 });
+    expect(Math.abs(e.x)).toBeLessThan(8); // pulled toward centre
+    expect(Math.abs(e.y)).toBeLessThan(4);
+    expect(e.z).toBeGreaterThan(-100); // still drifting in
+  });
+
+  it('stingers weave harder and faster than grunts', () => {
+    const mk = (kind: 'stinger' | 'grunt') => {
+      const e = createEnemy();
+      resetEnemy(e);
+      e.alive = true;
+      e.kind = kind;
+      e.z = -120;
+      e.weave = 4;
+      e.vz = kind === 'stinger' ? 50 : 26;
+      return e;
+    };
+    const st = mk('stinger');
+    const gr = mk('grunt');
+    for (let i = 0; i < 240; i++) updateEnemy(st, 1 / 120, i / 120);
+    for (let i = 0; i < 240; i++) updateEnemy(gr, 1 / 120, i / 120);
+    expect(st.z).toBeGreaterThan(gr.z); // faster approach
+  });
+});
+
+describe('difficulty mix for new archetypes', () => {
+  it('unlocks stingers at wave 2 and mines at wave 4', () => {
+    expect(difficultyForWave(1).mix.stinger).toBe(0);
+    expect(difficultyForWave(2).mix.stinger).toBeGreaterThan(0);
+    expect(difficultyForWave(3).mix.mine).toBe(0);
+    expect(difficultyForWave(4).mix.mine).toBeGreaterThan(0);
+  });
+
+  it('keeps the mix sane on deep waves', () => {
+    const m = difficultyForWave(30).mix;
+    for (const v of [m.grunt, m.stinger, m.darter, m.tank, m.mine]) {
+      expect(v).toBeGreaterThanOrEqual(0);
+      expect(v).toBeLessThanOrEqual(1);
+    }
   });
 });

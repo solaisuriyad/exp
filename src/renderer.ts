@@ -635,6 +635,68 @@ export class Renderer {
         g.add(ring);
         return g;
       }
+      case 'stinger': {
+        // Needle-nosed rusher with swept X-blades, acid green.
+        const mat = this.track(
+          new THREE.MeshStandardMaterial({
+            color: 0x62ff8a,
+            emissive: new THREE.Color(0x00330a),
+            metalness: 0.6,
+            roughness: 0.3,
+            flatShading: true,
+          }),
+        );
+        const g = new THREE.Group();
+        const nose = new THREE.Mesh(this.track(new THREE.ConeGeometry(0.8, 3.4, 4)), mat);
+        nose.rotation.x = Math.PI / 2;
+        g.add(nose);
+        const bladeGeo = this.track(new THREE.BoxGeometry(2.6, 0.12, 0.9));
+        for (const rot of [0.7, -0.7]) {
+          const blade = new THREE.Mesh(bladeGeo, mat);
+          blade.rotation.z = rot;
+          blade.position.z = 0.6;
+          g.add(blade);
+        }
+        const eye = new THREE.Mesh(
+          this.track(new THREE.SphereGeometry(0.3, 8, 6)),
+          this.track(new THREE.MeshBasicMaterial({ color: 0xd8ffd0, fog: false })),
+        );
+        eye.position.set(0, 0, 1.2);
+        g.add(eye);
+        return g;
+      }
+      case 'mine': {
+        // Spiked amber orb with a pulsing core.
+        const mat = this.track(
+          new THREE.MeshStandardMaterial({
+            color: 0xffd23a,
+            emissive: new THREE.Color(0x332000),
+            metalness: 0.5,
+            roughness: 0.55,
+            flatShading: true,
+          }),
+        );
+        const g = new THREE.Group();
+        const core = new THREE.Mesh(this.track(new THREE.IcosahedronGeometry(1.5, 0)), mat);
+        g.add(core);
+        const spikeGeo = this.track(new THREE.ConeGeometry(0.22, 1.2, 5));
+        const dirs: Array<[number, number, number]> = [
+          [1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1],
+        ];
+        for (const [dx, dy, dz] of dirs) {
+          const spike = new THREE.Mesh(spikeGeo, mat);
+          spike.position.set(dx * 1.5, dy * 1.5, dz * 1.5);
+          spike.lookAt(dx * 3, dy * 3, dz * 3);
+          spike.rotateX(Math.PI / 2);
+          g.add(spike);
+        }
+        const fuse = new THREE.Mesh(
+          this.track(new THREE.SphereGeometry(0.5, 10, 8)),
+          this.track(new THREE.MeshBasicMaterial({ color: 0xff6a3a, fog: false })),
+        );
+        g.add(fuse);
+        return g;
+      }
       case 'boss': {
         const g = new THREE.Group();
         const mat = this.track(

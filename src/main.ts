@@ -71,6 +71,7 @@ const boot = async (): Promise<void> => {
       },
       onSelectShip: (ship) => game.setShip(ship),
       onPower: () => game.requestPowerShot(),
+      onPickUpgrade: (id) => game.pickUpgrade(id),
       onCalibrate: async () => {
         game.enterCalibration();
         const result = await game.calibrateTilt();
@@ -113,6 +114,7 @@ const boot = async (): Promise<void> => {
       onState: (s) => {
         if (s === 'menu') ui.showScreen('menu');
         else if (s === 'calibrate') ui.showScreen('calibrate');
+        else if (s === 'upgrade') ui.showScreen('upgrade');
         else if (s === 'paused') ui.showScreen('paused');
         else if (s === 'gameover') ui.showScreen('gameover');
         else if (s === 'countdown' || s === 'playing') ui.showScreen('none');
@@ -127,6 +129,7 @@ const boot = async (): Promise<void> => {
       onCountdown: (n) => ui.showCountdown(n),
       onControlMode: (m) => ui.setControlMode(m),
       onGameOver: (r) => ui.showGameOver(r),
+      onUpgrades: (wave, choices) => ui.showUpgrades(wave, choices),
     });
   } catch (err) {
     fail('RENDERER FAILED TO START', String(err));

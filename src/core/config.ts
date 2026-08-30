@@ -87,6 +87,15 @@ export const ENEMY = {
   darter: { hp: 1, radius: 1.35, speed: 42, score: 150, fireCooldown: [2.4, 4.2] },
   tank: { hp: 7, radius: 2.5, speed: 15, score: 300, fireCooldown: [1.1, 1.9] },
   boss: { hp: 220, radius: 7.5, speed: 9, score: 5000, fireCooldown: [0.55, 0.8] },
+  stinger: { hp: 1, radius: 1.3, speed: 50, score: 175, fireCooldown: [1.6, 2.8] },
+  mine: { hp: 3, radius: 1.8, speed: 12, score: 200, fireCooldown: [999, 999] },
+} as const;
+
+/** Fragment burst a mine releases when destroyed. */
+export const MINE_BURST = {
+  shards: 6,
+  speed: 26,
+  vz: 16,
 } as const;
 
 export const ENEMY_BULLET = {

@@ -32,8 +32,17 @@ export class Player {
   /** AEGIS overshield seconds remaining; 0 = inactive. */
   guard = 0;
   fireCooldown = 0;
-  /** POWER weapon magazine. */
+  /** Primary cannon cadence; RAPID COILS shrink it. */
+  fireInterval: number = PLAYER.fireInterval;
+  /** POWER weapon magazine (current / max). */
   powerCharges: number = POWER_WEAPON.charges;
+  powerMax: number = POWER_WEAPON.charges;
+  /** Upgrade stack counters (capped in systems/upgrades.ts). */
+  speedStacks = 0;
+  rapidStacks = 0;
+  magnetStacks = 0;
+  /** Pickup attraction radius; TRACTOR MAGNET grows it. */
+  magnetRange = 16;
   /** 0..interval progress toward the next recharging POWER shot. */
   powerRecharge = 0;
   powerCooldown = 0;
@@ -68,9 +77,15 @@ export class Player {
     this.nova = 0;
     this.guard = 0;
     this.fireCooldown = 0;
+    this.fireInterval = PLAYER.fireInterval;
     this.powerCharges = POWER_WEAPON.charges;
+    this.powerMax = POWER_WEAPON.charges;
     this.powerRecharge = 0;
     this.powerCooldown = 0;
+    this.speedStacks = 0;
+    this.rapidStacks = 0;
+    this.magnetStacks = 0;
+    this.magnetRange = 16;
     this.bank = 0;
     this.throttle = 0;
   }
@@ -123,7 +138,7 @@ export class Player {
     if (this.guard > 0) this.guard = Math.max(0, this.guard - dt);
 
     // POWER magazine recharges one shot per interval while below capacity.
-    if (this.powerCharges < POWER_WEAPON.charges) {
+    if (this.powerCharges < this.powerMax) {
       this.powerRecharge += dt;
       if (this.powerRecharge >= POWER_WEAPON.rechargeInterval) {
         this.powerRecharge = 0;
@@ -180,6 +195,7 @@ export class Player {
    * still cooling down — the request is simply dropped, never queued.
    */
   consumePower(): boolean {
+    if (!this.alive) return false;
     if (this.powerCharges <= 0 || this.powerCooldown > 0) return false;
     this.powerCharges -= 1;
     this.powerCooldown = POWER_WEAPON.fireCooldown;

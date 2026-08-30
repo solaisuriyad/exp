@@ -32,6 +32,7 @@ export interface UiHandlers {
   onControlPreference: (pref: 'auto' | 'tilt' | 'touch') => void;
   onSelectShip: (ship: 'vector' | 'lance' | 'bastion') => void;
   onPower: () => void;
+  onPickUpgrade: (id: string) => void;
   onCalibrate: () => void;
   onCommitCalibration: () => void;
   onCancelCalibration: () => void;
@@ -75,6 +76,9 @@ export class Ui {
   private powerBar!: HTMLElement;
   private aegisNode!: HTMLElement;
   private lockChip!: HTMLElement;
+  private upgradeScreen!: HTMLElement;
+  private upgradeCards!: HTMLElement;
+  private upgradeLevelNode!: HTMLElement;
 
   private toastTimer: number | null = null;
   private countdownValue = -1;
@@ -87,6 +91,7 @@ export class Ui {
     this.buildMenu();
     this.buildPause();
     this.buildCalibrate();
+    this.buildUpgrade();
     this.buildGameOver();
   }
 
@@ -332,6 +337,17 @@ export class Ui {
     cancel.addEventListener('click', () => this.handlers.onCancelCalibration());
   }
 
+  private buildUpgrade(): void {
+    this.upgradeScreen = el('div', 'screen hidden', this.root);
+    const panel = el('div', 'panel panel-narrow', this.upgradeScreen);
+    el('div', 'eyebrow', panel).textContent = 'LEVEL COMPLETE';
+    this.upgradeLevelNode = el('h2', 'title-sm', panel);
+    this.upgradeLevelNode.textContent = 'CHOOSE UPGRADE';
+    el('p', 'tagline', panel).textContent =
+      'Your interceptor is refitted between levels. Pick one modification.';
+    this.upgradeCards = el('div', 'upgrade-cards', panel);
+  }
+
   private buildGameOver(): void {
     this.gameoverScreen = el('div', 'screen hidden', this.root);
     const panel = el('div', 'panel', this.gameoverScreen);
@@ -355,12 +371,29 @@ export class Ui {
 
   // ------------------------------------------------------------------ state
 
-  showScreen(name: 'menu' | 'gameover' | 'paused' | 'calibrate' | 'none'): void {
+  showScreen(
+    name: 'menu' | 'gameover' | 'paused' | 'calibrate' | 'upgrade' | 'none',
+  ): void {
     this.menuScreen.classList.toggle('hidden', name !== 'menu');
     this.gameoverScreen.classList.toggle('hidden', name !== 'gameover');
     this.pauseScreen.classList.toggle('hidden', name !== 'paused');
     this.calibrateScreen.classList.toggle('hidden', name !== 'calibrate');
+    this.upgradeScreen.classList.toggle('hidden', name !== 'upgrade');
     this.hud.classList.toggle('hidden', name !== 'none');
+  }
+
+  showUpgrades(wave: number, choices: Array<{ id: string; name: string; desc: string }>): void {
+    this.upgradeLevelNode.textContent = `WAVE ${wave} CLEARED — CHOOSE UPGRADE`;
+    this.upgradeCards.innerHTML = '';
+    for (const c of choices) {
+      const card = btn('upgrade-card', this.upgradeCards);
+      card.type = 'button';
+      const name = el('div', 'upgrade-name', card);
+      name.textContent = c.name;
+      const desc = el('div', 'upgrade-desc', card);
+      desc.textContent = c.desc;
+      card.addEventListener('click', () => this.handlers.onPickUpgrade(c.id));
+    }
   }
 
   updateHud(h: HudSnapshot): void {

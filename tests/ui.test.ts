@@ -24,6 +24,7 @@ const noopHandlers = (): UiHandlers => ({
   onCancelCalibration: vi.fn(),
   onSelectShip: vi.fn(),
   onPower: vi.fn(),
+  onPickUpgrade: vi.fn(),
 });
 
 let parent: HTMLElement;

@@ -5,8 +5,12 @@ wrapped as a native APK with **Capacitor**, and built end-to-end by **GitHub Act
 
 - Three selectable interceptors (VECTOR / LANCE / BASTION) with distinct speed,
   armour and hull size.
-- Enemy shooter archetypes: aimed shots, 3-way spreads, slow *powerful* mortars,
-  boss pattern fire.
+- Six enemy ship archetypes: grunt (aimed), darter (3-way spread), stinger
+  (fast weaver, twin rake), tank (powerful mortars), mine (homing orb that
+  bursts into shards), boss (pattern fire).
+- Roguelite progression: clearing a level pauses the run and drafts three
+  ship upgrades (plating, weapon core, overdrive, rapid coils, power
+  capacitor, repair drones, tractor magnet) — pick one, stack across levels.
 - **POWER lance**: 5-charge magazine, AoE detonation, one charge recharges per
   3 s interval. Fire with the on-screen PWR button or **F / Shift**.
 - **Aim-lock**: when a tank or boss is in range the reticle locks on and your

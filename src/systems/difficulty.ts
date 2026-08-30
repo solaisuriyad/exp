@@ -9,7 +9,7 @@ export interface DifficultySnapshot {
   /** Multiplier applied to enemy fire rate (lower = shoots more often). */
   fireScale: number;
   /** Relative likelihood weights per archetype for this wave. */
-  mix: { grunt: number; darter: number; tank: number };
+  mix: { grunt: number; darter: number; tank: number; stinger: number; mine: number };
 }
 
 const clampNum = (v: number, lo: number, hi: number): number =>
@@ -43,9 +43,11 @@ export const difficultyForWave = (wave: number): DifficultySnapshot => {
     fireScale,
     mix: {
       grunt: 1,
-      // Darters appear from wave 3, tanks from wave 4.
+      // Stingers from wave 2, darters wave 3, mines + tanks wave 4.
+      stinger: w >= 2 ? clampNum(0.3 + (w - 2) * 0.06, 0, 0.7) : 0,
       darter: w >= 3 ? clampNum(0.25 + (w - 3) * 0.09, 0, 0.85) : 0,
       tank: w >= 4 ? clampNum(0.1 + (w - 4) * 0.05, 0, 0.45) : 0,
+      mine: w >= 4 ? clampNum(0.15 + (w - 4) * 0.04, 0, 0.5) : 0,
     },
   };
 };
