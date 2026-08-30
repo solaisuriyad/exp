@@ -33,33 +33,35 @@ describe('rollDrop', () => {
     expect(countFor(PICKUP.tankDropChance)).toBeGreaterThan(countFor(PICKUP.dropChance));
   });
 
-  it('produces all three kinds, weighted toward weapon upgrades', () => {
+  it('produces all four kinds, weighted weapon > aegis > shield > nova', () => {
     const rng = new Rng(5);
-    const tally: Record<string, number> = { weapon: 0, shield: 0, nova: 0 };
+    const tally: Record<string, number> = { weapon: 0, shield: 0, nova: 0, aegis: 0 };
     for (let i = 0; i < 30000; i++) {
       const k = rollDrop(rng, 1);
       if (k) tally[k] += 1;
     }
-    expect(tally.weapon).toBeGreaterThan(0);
-    expect(tally.shield).toBeGreaterThan(0);
-    expect(tally.nova).toBeGreaterThan(0);
-    expect(tally.weapon!).toBeGreaterThan(tally.shield!);
+    for (const kind of ['weapon', 'shield', 'nova', 'aegis']) {
+      expect(tally[kind]).toBeGreaterThan(0);
+    }
+    expect(tally.weapon!).toBeGreaterThan(tally.aegis!);
+    expect(tally.aegis!).toBeGreaterThan(tally.shield!);
     expect(tally.shield!).toBeGreaterThan(tally.nova!);
   });
 
   it('matches the configured weight ratios', () => {
     const rng = new Rng(6);
-    const tally: Record<string, number> = { weapon: 0, shield: 0, nova: 0 };
+    const tally: Record<string, number> = { weapon: 0, shield: 0, nova: 0, aegis: 0 };
     const n = 60000;
     for (let i = 0; i < n; i++) {
       const k = rollDrop(rng, 1);
       if (k) tally[k] += 1;
     }
     const w = PICKUP.weights;
-    const total = w.weapon + w.shield + w.nova;
+    const total = w.weapon + w.shield + w.nova + w.aegis;
     expect(tally.weapon! / n).toBeCloseTo(w.weapon / total, 1);
     expect(tally.shield! / n).toBeCloseTo(w.shield / total, 1);
     expect(tally.nova! / n).toBeCloseTo(w.nova / total, 1);
+    expect(tally.aegis! / n).toBeCloseTo(w.aegis / total, 1);
   });
 });
 

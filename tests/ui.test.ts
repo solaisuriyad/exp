@@ -22,6 +22,8 @@ const noopHandlers = (): UiHandlers => ({
   onCalibrate: vi.fn(),
   onCommitCalibration: vi.fn(),
   onCancelCalibration: vi.fn(),
+  onSelectShip: vi.fn(),
+  onPower: vi.fn(),
 });
 
 let parent: HTMLElement;
@@ -80,6 +82,11 @@ describe('Ui live updates', () => {
         waveFrac: 0.4,
         controlMode: 'touch',
         fps: 60,
+        powerCharges: 3,
+        powerMax: 5,
+        powerRechargeFrac: 0.4,
+        guardTime: 12,
+        locked: false,
       }),
     ).not.toThrow();
     expect(parent.querySelector('.hud-score')?.textContent).toBe('12,345');

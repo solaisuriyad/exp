@@ -107,5 +107,19 @@ export const updateEnemy = (e: Enemy, dt: number, elapsed: number): void => {
   }
 };
 
+/**
+ * Shooter personality per archetype. Grunts fire single aimed shots, darters
+ * fan a 3-way spread, tanks lob slow *powerful* mortars and bosses run their
+ * pattern cycle with powerful fire.
+ */
+export type ShotKind = 'aim' | 'spread' | 'heavy' | 'boss';
+
+export const shotKindFor = (kind: EnemyKind): ShotKind =>
+  kind === 'grunt' ? 'aim' : kind === 'darter' ? 'spread' : kind === 'tank' ? 'heavy' : 'boss';
+
+/** Powerful opponents: the aim-lock engages on these, and their hits erode AEGIS. */
+export const isPowerfulShooter = (kind: EnemyKind): boolean =>
+  kind === 'tank' || kind === 'boss';
+
 export const statsFor = (kind: EnemyKind): (typeof ENEMY)[EnemyKind] =>
   ENEMY[kind];

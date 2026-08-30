@@ -18,6 +18,52 @@ export const WORLD = {
   bulletLifeZ: -210,
 } as const;
 
+/**
+ * Playable interceptors. VECTOR is the baseline; LANCE trades armour for
+ * speed; BASTION is the opposite. Stats are read by Player on reset.
+ */
+export const SHIPS = {
+  vector:  { name: 'VECTOR',  maxSpeed: 30, accel: 42, startShields: 3, hullRadius: 1.35, color: 0x8fd3ff },
+  lance:   { name: 'LANCE',   maxSpeed: 38, accel: 56, startShields: 2, hullRadius: 1.15, color: 0x9dff6a },
+  bastion: { name: 'BASTION', maxSpeed: 24, accel: 32, startShields: 4, hullRadius: 1.6,  color: 0xffa23a },
+} as const;
+
+export type ShipId = keyof typeof SHIPS;
+
+/**
+ * Secondary "POWER" weapon: a 5-shot magazine of piercing AoE lances. Spent
+ * charges recharge one at a time on a fixed interval, so emptying the mag
+ * starts a reload clock rather than an instant refill.
+ */
+export const POWER_WEAPON = {
+  charges: 5,
+  rechargeInterval: 3,
+  fireCooldown: 0.35,
+  damage: 6,
+  splashDamage: 3,
+  aoeRadius: 6.5,
+  speed: 175,
+  radius: 1.1,
+} as const;
+
+/**
+ * AEGIS guard: a timed overshield from a pickup. Normal hits are absorbed
+ * for free; powerful hits (heavy mortars, bosses, rams by heavy ships) burn
+ * `powerfulHitPenalty` seconds off the remaining guard time instead of
+ * touching hull shields.
+ */
+export const GUARD = {
+  duration: 30,
+  powerfulHitPenalty: 2,
+} as const;
+
+export const AIMLOCK = {
+  /** Which archetypes qualify as a lockable "powerful opponent". */
+  engageRange: 240,
+  /** How hard player shots curve toward the locked target (1/s). */
+  turnRate: 4,
+} as const;
+
 export const PLAYER = {
   startShields: 3,
   maxShields: 5,
@@ -55,7 +101,7 @@ export const PICKUP = {
   dropChance: 0.13,
   /** Guaranteed drop chance for tanks, which feel bad to kill for nothing. */
   tankDropChance: 0.45,
-  weights: { weapon: 0.5, shield: 0.32, nova: 0.18 },
+  weights: { weapon: 0.42, shield: 0.2, nova: 0.14, aegis: 0.24 },
 } as const;
 
 export const SCORING = {

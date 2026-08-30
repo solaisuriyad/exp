@@ -1,7 +1,9 @@
 import * as THREE from 'three';
-import { WORLD } from './core/config.js';
+import { SHIPS, WORLD } from './core/config.js';
 import type { EnemyKind } from './core/types.js';
 import type { Bullet } from './entities/bullet.js';
+
+export type BulletFlavour = 'player' | 'playerPower' | 'enemy' | 'enemyHeavy';
 import type { Enemy } from './entities/enemy.js';
 import type { Pickup } from './entities/pickup.js';
 import type { Player } from './entities/player.js';
@@ -116,7 +118,10 @@ export class Renderer {
   private readonly mat: Record<string, THREE.Material> = {};
 
   private ship: THREE.Group | null = null;
+  private hullMat: THREE.MeshStandardMaterial | null = null;
+  private lastShipColor = 0;
   private engineGlow: THREE.Mesh | null = null;
+  private lockReticle: THREE.Group | null = null;
   private shieldBubble: THREE.Mesh | null = null;
   private novaRing: THREE.Mesh | null = null;
 
@@ -285,7 +290,8 @@ export class Renderer {
         roughness: 0.28,
         emissive: new THREE.Color(0x0a2540),
       }),
-    );
+    ) as THREE.MeshStandardMaterial;
+    this.hullMat = hullMat;
     const darkMat = this.track(
       new THREE.MeshStandardMaterial({
         color: COL.hullDark,
@@ -404,6 +410,29 @@ export class Renderer {
 
     this.ship = g;
     this.scene.add(g);
+
+    // Aim-lock reticle: two counter-rotating rings, billboarded in syncLock.
+    const ret = new THREE.Group();
+    const retMat = this.track(
+      new THREE.MeshBasicMaterial({
+        color: 0xff4d6d,
+        transparent: true,
+        opacity: 0.9,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        fog: false,
+        side: THREE.DoubleSide,
+      }),
+    );
+    const r1 = new THREE.Mesh(this.track(new THREE.RingGeometry(3.1, 3.35, 32)), retMat);
+    const r2 = new THREE.Mesh(
+      this.track(new THREE.RingGeometry(3.8, 3.95, 4, 1, Math.PI / 6)),
+      retMat,
+    );
+    ret.add(r1, r2);
+    ret.visible = false;
+    this.lockReticle = ret;
+    this.scene.add(ret);
   }
 
   private buildParticles(): void {
@@ -496,11 +525,18 @@ export class Renderer {
     return (this.geo.bullet ??= this.track(new THREE.CapsuleGeometry(0.2, 1.5, 3, 6)));
   }
 
-  private bulletMaterial(faction: 0 | 1): THREE.Material {
-    const key = faction === 0 ? 'bulletP' : 'bulletE';
-    return (this.mat[key] ??= this.track(
+  private bulletMaterial(variant: BulletFlavour): THREE.Material {
+    const color =
+      variant === 'player'
+        ? COL.playerBullet
+        : variant === 'playerPower'
+          ? 0xfff6c8
+          : variant === 'enemyHeavy'
+            ? 0xffa23a
+            : COL.enemyBullet;
+    return (this.mat[`bullet_${variant}`] ??= this.track(
       new THREE.MeshBasicMaterial({
-        color: faction === 0 ? COL.playerBullet : COL.enemyBullet,
+        color,
         transparent: true,
         opacity: 0.95,
         blending: THREE.AdditiveBlending,
@@ -510,21 +546,22 @@ export class Renderer {
     ));
   }
 
-  obtainBulletMesh(faction: 0 | 1): THREE.Mesh {
-    const m = this.bulletMeshes.pop();
-    if (m) {
-      m.material = this.bulletMaterial(faction);
-      m.visible = true;
-      return m;
+  obtainBulletMesh(variant: BulletFlavour): THREE.Mesh {
+    let m = this.bulletMeshes.pop();
+    if (!m) {
+      m = new THREE.Mesh(this.bulletGeometry(), this.bulletMaterial(variant));
+      m.frustumCulled = false;
+      this.scene.add(m);
     }
-    const mesh = new THREE.Mesh(this.bulletGeometry(), this.bulletMaterial(faction));
-    mesh.frustumCulled = false;
-    this.scene.add(mesh);
-    return mesh;
+    m.material = this.bulletMaterial(variant);
+    m.scale.setScalar(variant === 'playerPower' ? 1.9 : variant === 'enemyHeavy' ? 1.6 : 1);
+    m.visible = true;
+    return m;
   }
 
   releaseBulletMesh(mesh: THREE.Mesh): void {
     mesh.visible = false;
+    mesh.scale.setScalar(1);
     if (this.bulletMeshes.length < 220) this.bulletMeshes.push(mesh);
     else this.scene.remove(mesh);
   }
@@ -680,7 +717,14 @@ export class Renderer {
 
   private pickupMaterial(kind: Pickup['kind']): THREE.Material {
     const key = `pickup_${kind}`;
-    const color = kind === 'weapon' ? COL.weapon : kind === 'shield' ? COL.shield : COL.nova;
+    const color =
+      kind === 'weapon'
+        ? COL.weapon
+        : kind === 'shield'
+          ? COL.shield
+          : kind === 'nova'
+            ? COL.nova
+            : 0x59ffd8;
     return (this.mat[key] ??= this.track(
       new THREE.MeshBasicMaterial({
         color,
@@ -701,7 +745,9 @@ export class Renderer {
           ? this.track(new THREE.OctahedronGeometry(1.15, 0))
           : p.kind === 'shield'
             ? this.track(new THREE.IcosahedronGeometry(1.15, 0))
-            : this.track(new THREE.TorusKnotGeometry(0.8, 0.28, 40, 6));
+            : p.kind === 'aegis'
+              ? this.track(new THREE.TorusGeometry(1.05, 0.3, 8, 6)) // hex shield ring
+              : this.track(new THREE.TorusKnotGeometry(0.8, 0.28, 40, 6));
       mesh = new THREE.Mesh(geo, this.pickupMaterial(p.kind));
       mesh.frustumCulled = false;
       this.pickupMeshes.set(p, mesh);
@@ -730,6 +776,14 @@ export class Renderer {
   syncPlayer(p: Player, dt: number): void {
     if (!this.ship) return;
     this.ship.visible = p.alive;
+
+    // Per-ship hull tint.
+    const shipColor = SHIPS[p.shipId].color;
+    if (this.hullMat && shipColor !== this.lastShipColor) {
+      this.lastShipColor = shipColor;
+      this.hullMat.color.setHex(shipColor);
+      this.hullMat.emissive.setHex(shipColor).multiplyScalar(0.12);
+    }
     this.ship.position.set(p.x, p.y, WORLD.playerZ);
     this.ship.rotation.z = p.bank;
     this.ship.rotation.x = Math.sin(this.time * 1.7) * 0.02;
@@ -747,13 +801,19 @@ export class Renderer {
     }
 
     if (this.shieldBubble) {
-      const on = p.invuln > 0 || p.shields < 3;
+      const guarded = p.guard > 0;
+      const on = guarded || p.invuln > 0 || p.shields < 3;
       this.shieldBubble.visible = on;
       if (on) {
+        const mat = this.shieldBubble.material as THREE.MeshBasicMaterial;
+        // AEGIS reads teal, hull shields read blue.
+        mat.color.setHex(guarded ? 0x59ffd8 : 0x59d8ff);
         const pulse = 1 + Math.sin(this.time * 5) * 0.05;
-        this.shieldBubble.scale.setScalar(pulse);
-        (this.shieldBubble.material as THREE.MeshBasicMaterial).opacity =
-          0.1 + Math.sin(this.time * 6) * 0.05 + (p.invuln > 0 ? 0.12 : 0);
+        this.shieldBubble.scale.setScalar(guarded ? pulse * 1.12 : pulse);
+        mat.opacity =
+          (guarded ? 0.2 : 0.1) +
+          Math.sin(this.time * 6) * 0.05 +
+          (p.invuln > 0 ? 0.12 : 0);
       }
     }
 
@@ -808,6 +868,20 @@ export class Renderer {
       const pulse = 1 + Math.sin(p.age * 6) * 0.12;
       mesh.scale.setScalar(pulse);
     }
+  }
+
+  syncLock(target: { x: number; y: number; z: number } | null, dt: number): void {
+    if (!this.lockReticle) return;
+    if (!target) {
+      this.lockReticle.visible = false;
+      return;
+    }
+    this.lockReticle.visible = true;
+    this.lockReticle.position.set(target.x, target.y, target.z);
+    this.lockReticle.lookAt(this.camera.position);
+    this.lockReticle.rotation.z += dt * 2.4;
+    const pulse = 1 + Math.sin(this.time * 9) * 0.07;
+    this.lockReticle.scale.setScalar(pulse);
   }
 
   syncParticles(field: ParticleField, rings: RingField): void {

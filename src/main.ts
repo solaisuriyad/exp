@@ -69,6 +69,8 @@ const boot = async (): Promise<void> => {
         ui.syncControlPreference(pref);
         if (pref === 'tilt') void warnIfNoTilt();
       },
+      onSelectShip: (ship) => game.setShip(ship),
+      onPower: () => game.requestPowerShot(),
       onCalibrate: async () => {
         game.enterCalibration();
         const result = await game.calibrateTilt();
@@ -134,6 +136,7 @@ const boot = async (): Promise<void> => {
   // Reflect persisted settings in the UI before showing anything.
   ui.syncToggles(game.currentSettings);
   ui.syncControlPreference(game.currentSettings.controlPreference);
+  ui.syncShip(game.currentSettings.ship);
   ui.setMenuHigh(game.currentHighScore);
   ui.setControlMode(game.currentSettings.controlPreference === 'touch' ? 'touch' : 'tilt');
 

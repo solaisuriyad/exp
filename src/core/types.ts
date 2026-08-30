@@ -12,7 +12,7 @@ export type GameState =
 
 export type EnemyKind = 'grunt' | 'darter' | 'tank' | 'boss';
 
-export type PickupKind = 'weapon' | 'shield' | 'nova';
+export type PickupKind = 'weapon' | 'shield' | 'nova' | 'aegis';
 
 /**
  * Which device the steering came from this frame. Surfaced in the HUD so the

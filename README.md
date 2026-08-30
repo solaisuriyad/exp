@@ -3,7 +3,17 @@
 A tilt-controlled **3D space shooter for Android**, rendered with **Three.js / WebGL**,
 wrapped as a native APK with **Capacitor**, and built end-to-end by **GitHub Actions**.
 
-- Fully procedural visuals (no model/texture assets) — the whole game is ~160 KB gzipped.
+- Three selectable interceptors (VECTOR / LANCE / BASTION) with distinct speed,
+  armour and hull size.
+- Enemy shooter archetypes: aimed shots, 3-way spreads, slow *powerful* mortars,
+  boss pattern fire.
+- **POWER lance**: 5-charge magazine, AoE detonation, one charge recharges per
+  3 s interval. Fire with the on-screen PWR button or **F / Shift**.
+- **Aim-lock**: when a tank or boss is in range the reticle locks on and your
+  shots home toward it.
+- **AEGIS guard** pickup: a floating 30 s overshield; normal hits are absorbed
+  for free, powerful hits burn 2 s off the remaining guard time.
+- Fully procedural visuals (no model/texture assets) — the whole game is ~170 KB gzipped.
 - Deterministic fixed-timestep simulation (120 Hz) behind a variable-rate renderer.
 - **Gyroscope/accelerometer steering** with calibration, iOS permission handling, and an
   automatic **touch-drag fallback** when no motion sensor is available.
@@ -26,8 +36,10 @@ npm run dev        # dev server with HMR
 npm run build && npm run preview
 ```
 
-On desktop: **arrows / WASD** steer, **space** fires, **P / Esc** pauses.
-On a phone: tilt to steer (or drag anywhere with TOUCH mode), autofire is on by default.
+On desktop: **arrows / WASD** steer, **space** fires, **F / Shift** fires the POWER
+lance, **P / Esc** pauses.
+On a phone: tilt to steer (or drag anywhere with TOUCH mode), autofire is on by
+default, and the round **PWR** button fires the power lance.
 
 ## Android build
 

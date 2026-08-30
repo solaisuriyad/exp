@@ -42,9 +42,10 @@ export const resetPickup = (p: Pickup): void => {
 export const rollDrop = (rng: Rng, dropChance: number): PickupKind | null => {
   if (!rng.chance(dropChance)) return null;
   const w = PICKUP.weights;
-  const total = w.weapon + w.shield + w.nova;
+  const total = w.weapon + w.shield + w.nova + w.aegis;
   const r = rng.next() * total;
   if (r < w.weapon) return 'weapon';
   if (r < w.weapon + w.shield) return 'shield';
-  return 'nova';
+  if (r < w.weapon + w.shield + w.nova) return 'nova';
+  return 'aegis';
 };

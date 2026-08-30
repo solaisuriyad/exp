@@ -1,46 +1,86 @@
-import { PLAYER, WORLD } from '../core/config.js';
+import { GUARD, PLAYER, POWER_WEAPON, SHIPS, WORLD, type ShipId } from '../core/config.js';
 import { clamp } from '../core/math.js';
+
+/**
+ * What a hit attempt did, so the game layer can react appropriately:
+ *  - 'ignored'   : invulnerability/nova/death absorbed it silently
+ *  - 'absorbed'  : the AEGIS guard ate it (powerful hits burn guard time)
+ *  - 'damaged'   : a hull shield was lost
+ *  - 'destroyed' : the last shield went; the run is over
+ */
+export type DamageResult = 'ignored' | 'absorbed' | 'damaged' | 'destroyed';
 
 /**
  * Player ship state — pure data, no Three.js dependency, so it unit-tests in
  * Node. The renderer reads these fields and drives the mesh.
  */
 export class Player {
+  shipId: ShipId = 'vector';
   x = 0;
   y = 0;
   z = WORLD.playerZ;
   vx = 0;
   vy = 0;
-  shields: number = PLAYER.startShields;
+  shields: number = SHIPS.vector.startShields;
   alive = true;
-  weaponLevel: number = 1;
-  radius: number = PLAYER.hullRadius;
+  weaponLevel = 1;
+  radius: number = SHIPS.vector.hullRadius;
+  maxSpeed: number = SHIPS.vector.maxSpeed;
+  accel: number = SHIPS.vector.accel;
   invuln = 0;
   nova = 0;
+  /** AEGIS overshield seconds remaining; 0 = inactive. */
+  guard = 0;
   fireCooldown = 0;
+  /** POWER weapon magazine. */
+  powerCharges: number = POWER_WEAPON.charges;
+  /** 0..interval progress toward the next recharging POWER shot. */
+  powerRecharge = 0;
+  powerCooldown = 0;
   /** Bank angle in radians, purely cosmetic, derived from lateral velocity. */
   bank = 0;
   /** Engine throttle 0..1 for the exhaust glow. */
   throttle = 0;
 
+  /** Switch interceptor; takes effect immediately and on the next reset. */
+  applyShip(id: ShipId): void {
+    const s = SHIPS[id];
+    this.shipId = id;
+    this.maxSpeed = s.maxSpeed;
+    this.accel = s.accel;
+    this.radius = s.hullRadius;
+  }
+
   reset(): void {
+    const s = SHIPS[this.shipId];
     this.x = 0;
     this.y = 0;
     this.z = WORLD.playerZ;
     this.vx = 0;
     this.vy = 0;
-    this.shields = PLAYER.startShields;
+    this.shields = s.startShields;
     this.alive = true;
     this.weaponLevel = 1;
+    this.radius = s.hullRadius;
+    this.maxSpeed = s.maxSpeed;
+    this.accel = s.accel;
     this.invuln = PLAYER.invulnTime;
     this.nova = 0;
+    this.guard = 0;
     this.fireCooldown = 0;
+    this.powerCharges = POWER_WEAPON.charges;
+    this.powerRecharge = 0;
+    this.powerCooldown = 0;
     this.bank = 0;
     this.throttle = 0;
   }
 
   get isInvulnerable(): boolean {
     return this.invuln > 0 || this.nova > 0;
+  }
+
+  get isGuarded(): boolean {
+    return this.guard > 0;
   }
 
   /**
@@ -52,11 +92,11 @@ export class Player {
     const sx = clamp(steerX, -1, 1);
     const sy = clamp(steerY, -1, 1);
 
-    const targetVx = sx * PLAYER.maxSpeed;
-    const targetVy = sy * PLAYER.maxSpeed;
+    const targetVx = sx * this.maxSpeed;
+    const targetVy = sy * this.maxSpeed;
 
-    this.vx += (targetVx - this.vx) * Math.min(1, PLAYER.accel * dt / PLAYER.maxSpeed);
-    this.vy += (targetVy - this.vy) * Math.min(1, PLAYER.accel * dt / PLAYER.maxSpeed);
+    this.vx += (targetVx - this.vx) * Math.min(1, (this.accel * dt) / this.maxSpeed);
+    this.vy += (targetVy - this.vy) * Math.min(1, (this.accel * dt) / this.maxSpeed);
 
     // Drag so releasing tilt actually stops the ship instead of sliding.
     const dragF = Math.exp(-PLAYER.drag * dt);
@@ -77,22 +117,44 @@ export class Player {
     if (this.invuln > 0) this.invuln = Math.max(0, this.invuln - dt);
     if (this.nova > 0) this.nova = Math.max(0, this.nova - dt);
     if (this.fireCooldown > 0) this.fireCooldown = Math.max(0, this.fireCooldown - dt);
+    if (this.powerCooldown > 0) this.powerCooldown = Math.max(0, this.powerCooldown - dt);
+
+    // AEGIS burns down in real time.
+    if (this.guard > 0) this.guard = Math.max(0, this.guard - dt);
+
+    // POWER magazine recharges one shot per interval while below capacity.
+    if (this.powerCharges < POWER_WEAPON.charges) {
+      this.powerRecharge += dt;
+      if (this.powerRecharge >= POWER_WEAPON.rechargeInterval) {
+        this.powerRecharge = 0;
+        this.powerCharges += 1;
+      }
+    } else {
+      this.powerRecharge = 0;
+    }
   }
 
   /**
-   * Apply a hit. Returns true if the hit landed (i.e. the player was actually
-   * damaged), false if it was absorbed by invulnerability or Nova.
+   * Apply a hit. `powerful` marks heavy mortars / boss fire / heavy rams,
+   * which are the only thing that erodes the AEGIS guard (2 s per hit).
    */
-  hit(): boolean {
-    if (!this.alive || this.isInvulnerable) return false;
+  hit(powerful = false): DamageResult {
+    if (!this.alive) return 'ignored';
+    if (this.isInvulnerable) return 'ignored';
+    if (this.guard > 0) {
+      if (powerful) {
+        this.guard = Math.max(0, this.guard - GUARD.powerfulHitPenalty);
+      }
+      return 'absorbed';
+    }
     this.shields -= 1;
     if (this.shields <= 0) {
       this.shields = 0;
       this.alive = false;
-    } else {
-      this.invuln = PLAYER.invulnTime;
+      return 'destroyed';
     }
-    return true;
+    this.invuln = PLAYER.invulnTime;
+    return 'damaged';
   }
 
   heal(amount = 1): void {
@@ -107,6 +169,21 @@ export class Player {
 
   activateNova(): void {
     this.nova = PLAYER.novaDuration;
+  }
+
+  activateGuard(): void {
+    this.guard = GUARD.duration;
+  }
+
+  /**
+   * Spend a POWER charge. False when the magazine is empty or the shot is
+   * still cooling down — the request is simply dropped, never queued.
+   */
+  consumePower(): boolean {
+    if (this.powerCharges <= 0 || this.powerCooldown > 0) return false;
+    this.powerCharges -= 1;
+    this.powerCooldown = POWER_WEAPON.fireCooldown;
+    return true;
   }
 
   /** Muzzle offsets for the current weapon level. */

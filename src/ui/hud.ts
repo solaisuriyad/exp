@@ -30,6 +30,8 @@ export interface UiHandlers {
   onToggleSfx: (on: boolean) => void;
   onToggleAutofire: (on: boolean) => void;
   onControlPreference: (pref: 'auto' | 'tilt' | 'touch') => void;
+  onSelectShip: (ship: 'vector' | 'lance' | 'bastion') => void;
+  onPower: () => void;
   onCalibrate: () => void;
   onCommitCalibration: () => void;
   onCancelCalibration: () => void;
@@ -68,6 +70,11 @@ export class Ui {
   private tiltReadout!: HTMLElement;
   private tiltStatusNode!: HTMLElement;
   private modeChip!: HTMLElement;
+  private powerWrap!: HTMLElement;
+  private powerPips!: HTMLElement;
+  private powerBar!: HTMLElement;
+  private aegisNode!: HTMLElement;
+  private lockChip!: HTMLElement;
 
   private toastTimer: number | null = null;
   private countdownValue = -1;
@@ -122,6 +129,28 @@ export class Ui {
     this.modeChip = el('div', 'mode-chip', this.hud);
     this.modeNode = el('span', 'mode-text', this.modeChip);
     this.modeNode.textContent = 'TILT';
+
+    // AEGIS countdown under the shield pips.
+    this.aegisNode = el('div', 'aegis hidden', topRight);
+    this.aegisNode.textContent = 'AEGIS 30s';
+
+    // POWER button with its 5-charge magazine.
+    this.powerWrap = el('div', 'power-wrap', this.hud);
+    const powerBtn = btn('power-btn', this.powerWrap);
+    powerBtn.type = 'button';
+    powerBtn.setAttribute('aria-label', 'Fire power shot');
+    powerBtn.textContent = 'PWR';
+    powerBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.handlers.onPower();
+    });
+    this.powerPips = el('div', 'power-pips', this.powerWrap);
+    for (let i = 0; i < 5; i++) el('span', 'ppip', this.powerPips);
+    this.powerBar = el('div', 'power-bar', this.powerWrap);
+    el('div', 'power-fill', this.powerBar);
+
+    this.lockChip = el('div', 'lock-chip hidden', this.hud);
+    this.lockChip.textContent = '◈ LOCK';
 
     const pauseBtn = btn('pause-btn', this.hud);
     pauseBtn.type = 'button';
@@ -191,6 +220,28 @@ export class Ui {
     start.textContent = 'LAUNCH';
     start.addEventListener('click', () => this.handlers.onStart());
 
+    const hangar = el('div', 'controls-box', panel);
+    el('div', 'controls-title', hangar).textContent = 'HANGAR — INTERCEPTOR';
+    const shipSeg = el('div', 'segmented', hangar);
+    const ships: Array<['vector' | 'lance' | 'bastion', string]> = [
+      ['vector', 'VECTOR'],
+      ['lance', 'LANCE'],
+      ['bastion', 'BASTION'],
+    ];
+    for (const [id, label] of ships) {
+      const b = btn('seg-btn' + (id === 'vector' ? ' active' : ''), shipSeg);
+      b.type = 'button';
+      b.textContent = label;
+      b.dataset.ship = id;
+      b.addEventListener('click', () => {
+        shipSeg.querySelectorAll('.seg-btn').forEach((n) => n.classList.remove('active'));
+        b.classList.add('active');
+        this.handlers.onSelectShip(id);
+      });
+    }
+    el('div', 'hint', hangar).textContent =
+      'VECTOR is balanced. LANCE is faster with lighter shields. BASTION is slow but starts with 4 shields.';
+
     const controls = el('div', 'controls-box', panel);
     el('div', 'controls-title', controls).textContent = 'CONTROLS';
     const seg = el('div', 'segmented', controls);
@@ -215,7 +266,7 @@ export class Ui {
     calibBtn.textContent = 'CALIBRATE TILT';
     calibBtn.addEventListener('click', () => this.handlers.onCalibrate());
     el('div', 'hint', controls).textContent =
-      'Hold the phone naturally, then tap CALIBRATE to set your neutral centre. Desktop: arrow keys / WASD, space to fire.';
+      'Hold the phone naturally, then tap CALIBRATE to set your neutral centre. Desktop: arrows / WASD steer, space fires, F fires the POWER lance. Aim-lock engages automatically on tanks and bosses.';
 
     const opts = el('div', 'options', panel);
     this.toggleRow(opts, 'GLOW (BLOOM)', true, (v) => this.handlers.onToggleBloom(v));
@@ -338,6 +389,22 @@ export class Ui {
     if (h.novaFrac > 0) {
       this.novaNode.textContent = `NOVA ${(h.novaFrac * 100).toFixed(0)}%`;
     }
+
+    // POWER magazine pips + recharge progress.
+    const pips = this.powerPips.children;
+    for (let i = 0; i < pips.length; i++) {
+      (pips[i] as HTMLElement).classList.toggle('charged', i < h.powerCharges);
+    }
+    (this.powerBar.firstChild as HTMLElement).style.width =
+      `${(h.powerRechargeFrac * 100).toFixed(1)}%`;
+    this.powerWrap.classList.toggle('empty', h.powerCharges === 0);
+
+    // AEGIS guard countdown.
+    const guarded = h.guardTime > 0;
+    this.aegisNode.classList.toggle('hidden', !guarded);
+    if (guarded) this.aegisNode.textContent = `AEGIS ${Math.ceil(h.guardTime)}s`;
+
+    this.lockChip.classList.toggle('hidden', !h.locked);
   }
 
   setControlMode(mode: ControlMode): void {
@@ -451,6 +518,12 @@ export class Ui {
       btn.classList.toggle('on', on);
       btn.textContent = on ? 'ON' : 'OFF';
       btn.setAttribute('aria-checked', String(on));
+    });
+  }
+
+  syncShip(ship: 'vector' | 'lance' | 'bastion'): void {
+    this.root.querySelectorAll<HTMLButtonElement>('[data-ship]').forEach((b) => {
+      b.classList.toggle('active', b.dataset.ship === ship);
     });
   }
 

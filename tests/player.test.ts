@@ -82,7 +82,7 @@ describe('Player damage', () => {
     const p = new Player();
     p.reset();
     expect(p.isInvulnerable).toBe(true);
-    expect(p.hit()).toBe(false);
+    expect(p.hit()).toBe('ignored');
     expect(p.shields).toBe(PLAYER.startShields);
   });
 
@@ -90,26 +90,29 @@ describe('Player damage', () => {
     const p = new Player();
     p.reset();
     p.invuln = 0;
-    expect(p.hit()).toBe(true);
+    expect(p.hit()).toBe('damaged');
     expect(p.shields).toBe(PLAYER.startShields - 1);
     expect(p.isInvulnerable).toBe(true);
     // A second hit during i-frames does nothing.
-    expect(p.hit()).toBe(false);
+    expect(p.hit()).toBe('ignored');
     expect(p.shields).toBe(PLAYER.startShields - 1);
   });
 
   it('dies when the last shield goes', () => {
     const p = new Player();
     p.reset();
-    for (let i = 0; i < PLAYER.startShields; i++) {
+    for (let i = 0; i < PLAYER.startShields - 1; i++) {
       p.invuln = 0;
       p.nova = 0;
-      expect(p.hit()).toBe(true);
+      expect(p.hit()).toBe('damaged');
     }
+    p.invuln = 0;
+    p.nova = 0;
+    expect(p.hit()).toBe('destroyed');
     expect(p.alive).toBe(false);
     expect(p.shields).toBe(0);
     // A dead ship cannot be hit again.
-    expect(p.hit()).toBe(false);
+    expect(p.hit()).toBe('ignored');
   });
 
   it('treats Nova as invulnerability', () => {
@@ -118,7 +121,7 @@ describe('Player damage', () => {
     p.invuln = 0;
     p.activateNova();
     expect(p.isInvulnerable).toBe(true);
-    expect(p.hit()).toBe(false);
+    expect(p.hit()).toBe('ignored');
     expect(p.shields).toBe(PLAYER.startShields);
   });
 

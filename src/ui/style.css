@@ -640,3 +640,100 @@ canvas#gl {
   .nova,
   .boss-label { animation: none; }
 }
+
+/* ------------------------------------------------------- power / aegis */
+
+.power-wrap {
+  position: absolute;
+  right: calc(12px + var(--safe-right));
+  bottom: 26%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  pointer-events: auto;
+}
+
+.power-btn {
+  width: 62px;
+  height: 62px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 225, 77, 0.65);
+  background: radial-gradient(circle at 35% 30%, rgba(255, 246, 200, 0.35), rgba(80, 60, 0, 0.55));
+  color: var(--warn);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  box-shadow: 0 0 18px rgba(255, 225, 77, 0.35);
+  touch-action: manipulation;
+}
+
+.power-btn:active { transform: scale(0.94); }
+
+.power-wrap.empty .power-btn {
+  border-color: rgba(255, 255, 255, 0.2);
+  color: var(--dim);
+  box-shadow: none;
+}
+
+.power-pips {
+  display: flex;
+  gap: 4px;
+}
+
+.ppip {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.ppip.charged {
+  background: var(--warn);
+  border-color: transparent;
+  box-shadow: 0 0 8px rgba(255, 225, 77, 0.8);
+}
+
+.power-bar {
+  width: 54px;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.power-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--warn);
+}
+
+.aegis {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  color: #59ffd8;
+  border: 1px solid rgba(89, 255, 216, 0.5);
+  background: rgba(89, 255, 216, 0.1);
+  padding: 3px 10px;
+  border-radius: 16px;
+}
+
+.lock-chip {
+  position: absolute;
+  top: calc(10px + var(--safe-top));
+  left: 50%;
+  transform: translateX(-50%) translateY(46px);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.24em;
+  color: var(--bad);
+  border: 1px solid rgba(255, 77, 109, 0.55);
+  background: rgba(255, 77, 109, 0.12);
+  padding: 3px 10px;
+  border-radius: 14px;
+  animation: novaPulse 0.5s ease-in-out infinite alternate;
+}

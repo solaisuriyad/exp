@@ -1,11 +1,15 @@
 import { AudioEngine } from './audio/synth.js';
 import {
+  AIMLOCK,
   ENEMY_BULLET,
   FIXED_DT,
+  GUARD,
   MAX_FRAME_DT,
   PICKUP,
   PLAYER,
+  POWER_WEAPON,
   WORLD,
+  type ShipId,
 } from './core/config.js';
 import type { Mesh } from 'three';
 import { clamp } from './core/math.js';
@@ -31,9 +35,16 @@ import {
   resetBullet,
   type Bullet,
 } from './entities/bullet.js';
-import { createEnemy, resetEnemy, updateEnemy, type Enemy as EnemyT } from './entities/enemy.js';
+import {
+  createEnemy,
+  isPowerfulShooter,
+  resetEnemy,
+  shotKindFor,
+  updateEnemy,
+  type Enemy as EnemyT,
+} from './entities/enemy.js';
 import { createPickup, resetPickup, rollDrop, type Pickup } from './entities/pickup.js';
-import { Player } from './entities/player.js';
+import { Player, type DamageResult } from './entities/player.js';
 import { ParticleField, RingField } from './fx/particles.js';
 import { CameraShake } from './fx/shake.js';
 import { TiltInput, TouchSteer } from './input/tilt.js';
@@ -45,6 +56,7 @@ import {
   waveProgress,
   type DifficultySnapshot,
 } from './systems/difficulty.js';
+import { POWERFUL_KINDS, selectLockTarget } from './systems/lock.js';
 import { Scoring } from './systems/scoring.js';
 import {
   formationV,
@@ -78,6 +90,11 @@ export interface HudSnapshot {
   waveFrac: number;
   controlMode: ControlMode;
   fps: number;
+  powerCharges: number;
+  powerMax: number;
+  powerRechargeFrac: number;
+  guardTime: number;
+  locked: boolean;
 }
 
 export interface RunSummary {
@@ -140,6 +157,8 @@ export class Game {
 
   private lastControlMode: ControlMode = 'none';
   private disposed = false;
+  private lock: EnemyT | null = null;
+  private powerQueued = false;
 
   constructor(canvas: HTMLCanvasElement, events: GameEvents = {}, seed?: number) {
     this.canvas = canvas;
@@ -239,6 +258,15 @@ export class Game {
     this.renderer.setBloom(this.settings.bloom);
   }
 
+  setShip(id: ShipId): void {
+    this.updateSettings({ ship: id });
+    this.player.applyShip(id);
+  }
+
+  requestPowerShot(): void {
+    this.powerQueued = true;
+  }
+
   setControlPreference(pref: ControlPreference): void {
     this.updateSettings({ controlPreference: pref });
     if (pref === 'touch') this.tilt.stop();
@@ -252,6 +280,9 @@ export class Game {
     if (e.code === 'Space') {
       e.preventDefault();
       this.keyboardFire = true;
+    }
+    if (e.code === 'KeyF' || e.code === 'ShiftLeft') {
+      this.requestPowerShot();
     }
     if (e.code === 'Escape' || e.code === 'KeyP') {
       if (this.state === 'playing') this.pause();
@@ -348,6 +379,7 @@ export class Game {
     this.seed = randomSeed();
     this.rng = new Rng(this.seed);
 
+    this.player.applyShip(this.settings.ship);
     this.player.reset();
     this.scoring.reset();
     this.bullets.releaseAll();
@@ -505,6 +537,17 @@ export class Game {
     this.particles.update(dt);
     this.rings.update(dt);
 
+    this.lock = this.settings.aimlock
+      ? (selectLockTarget(
+          this.enemies.active,
+          POWERFUL_KINDS,
+          this.player.x,
+          this.player.y,
+          this.player.z,
+          AIMLOCK.engageRange,
+        ) as EnemyT | null)
+      : null;
+
     this.handleFiring(dt, input);
     this.handleSpawning(dt);
     this.updateBullets(dt);
@@ -537,9 +580,31 @@ export class Game {
       b.vy = 0;
       b.radius = PLAYER.bulletRadius;
       b.damage = o.damage;
-      b.mesh = this.renderer.obtainBulletMesh(0);
+      b.mesh = this.renderer.obtainBulletMesh('player');
     }
     this.audio.shoot(this.player.weaponLevel);
+
+    // POWER lance: queued from the HUD button / F key, spends a charge.
+    if (this.powerQueued && this.player.consumePower()) {
+      const b = this.bullets.obtain();
+      if (b) {
+        b.alive = true;
+        b.faction = 0;
+        b.isPower = true;
+        b.x = this.player.x;
+        b.y = this.player.y;
+        b.z = this.player.z - 2.2;
+        b.vz = -POWER_WEAPON.speed;
+        b.vx = 0;
+        b.vy = 0;
+        b.radius = POWER_WEAPON.radius;
+        b.damage = POWER_WEAPON.damage;
+        b.mesh = this.renderer.obtainBulletMesh('playerPower');
+      }
+      this.audio.nova();
+      this.shake.kick(0.22);
+    }
+    this.powerQueued = false;
 
     // Muzzle sparks.
     const sparks = Math.round(3 * this.particles.quality);
@@ -559,24 +624,44 @@ export class Game {
     }
   }
 
-  private fireEnemyShot(e: EnemyT, targetX: number, targetY: number): void {
+  private fireEnemyShot(
+    e: EnemyT,
+    targetX: number,
+    targetY: number,
+    opts: { powerful?: boolean; heavy?: boolean; angleY?: number } = {},
+  ): void {
     const b = this.bullets.obtain();
     if (!b) return;
     const dx = targetX - e.x;
     const dy = targetY - e.y;
     const dz = WORLD.playerZ - e.z;
     const len = Math.hypot(dx, dy, dz) || 1;
+    let ux = dx / len;
+    const uy = dy / len;
+    let uz = dz / len;
+    // Horizontal fan for spread shooters: rotate around the Y axis.
+    const a = opts.angleY ?? 0;
+    if (a !== 0) {
+      const c = Math.cos(a);
+      const sn = Math.sin(a);
+      const rx = ux * c + uz * sn;
+      const rz = -ux * sn + uz * c;
+      ux = rx;
+      uz = rz;
+    }
+    const speed = opts.heavy ? ENEMY_BULLET.speed * 0.6 : ENEMY_BULLET.speed;
     b.alive = true;
     b.faction = 1;
     b.x = e.x;
     b.y = e.y;
     b.z = e.z + e.radius * 0.6;
-    b.vx = (dx / len) * ENEMY_BULLET.speed;
-    b.vy = (dy / len) * ENEMY_BULLET.speed;
-    b.vz = (dz / len) * ENEMY_BULLET.speed;
-    b.radius = ENEMY_BULLET.radius;
+    b.vx = ux * speed;
+    b.vy = uy * speed;
+    b.vz = uz * speed;
+    b.radius = opts.heavy ? 1.05 : ENEMY_BULLET.radius;
     b.damage = 1;
-    b.mesh = this.renderer.obtainBulletMesh(1);
+    b.powerful = opts.powerful ?? false;
+    b.mesh = this.renderer.obtainBulletMesh(opts.heavy ? 'enemyHeavy' : 'enemy');
     this.audio.enemyShoot();
   }
 
@@ -599,7 +684,8 @@ export class Game {
           shot.vz = ENEMY_BULLET.speed * 0.55;
           shot.radius = ENEMY_BULLET.radius;
           shot.damage = 1;
-          shot.mesh = this.renderer.obtainBulletMesh(1);
+          shot.powerful = true;
+          shot.mesh = this.renderer.obtainBulletMesh('enemyHeavy');
         }
         this.audio.enemyShoot();
         break;
@@ -607,13 +693,13 @@ export class Game {
       case 1: {
         // Aimed triple.
         for (const off of [-1.6, 0, 1.6]) {
-          this.fireEnemyShot(b, this.player.x + off, this.player.y);
+          this.fireEnemyShot(b, this.player.x + off, this.player.y, { powerful: true });
         }
         break;
       }
       default: {
         // Sweeping stream toward the player's current position.
-        this.fireEnemyShot(b, this.player.x, this.player.y);
+        this.fireEnemyShot(b, this.player.x, this.player.y, { powerful: true });
         break;
       }
     }
@@ -691,8 +777,27 @@ export class Game {
 
   private updateBullets(dt: number): void {
     const arr = this.bullets.active;
+    const lock = this.lock;
     for (let i = arr.length - 1; i >= 0; i--) {
       const b = arr[i]!;
+
+      // Aim-lock homing: player shots curve toward the locked opponent.
+      if (b.faction === 0 && lock && lock.alive) {
+        const dx = lock.x - b.x;
+        const dy = lock.y - b.y;
+        const dz = lock.z - b.z;
+        const dist = Math.hypot(dx, dy, dz) || 1;
+        const speed = Math.hypot(b.vx, b.vy, b.vz) || 1;
+        const k = Math.min(1, AIMLOCK.turnRate * dt);
+        const nx = b.vx / speed + (dx / dist - b.vx / speed) * k;
+        const ny = b.vy / speed + (dy / dist - b.vy / speed) * k;
+        const nz = b.vz / speed + (dz / dist - b.vz / speed) * k;
+        const nl = Math.hypot(nx, ny, nz) || 1;
+        b.vx = (nx / nl) * speed;
+        b.vy = (ny / nl) * speed;
+        b.vz = (nz / nl) * speed;
+      }
+
       b.x += b.vx * dt;
       b.y += b.vy * dt;
       b.z += b.vz * dt;
@@ -723,12 +828,23 @@ export class Game {
       e.fireTimer -= dt;
       if (e.fireTimer <= 0 && e.z > WORLD.spawnZ + 20 && e.z < -8) {
         e.fireTimer = e.fireCooldown * this.rng.range(0.85, 1.15);
-        if (e.kind === 'boss') {
+        const sk = shotKindFor(e.kind);
+        if (sk === 'boss') {
           e.patternTimer += 1;
           if (e.patternTimer % 6 === 0) e.pattern = (e.pattern + 1) % 3;
           this.fireBossPattern(e);
         } else if (this.player.alive && this.rng.chance(e.kind === 'tank' ? 0.85 : 0.6)) {
-          this.fireEnemyShot(e, this.player.x, this.player.y);
+          if (sk === 'spread') {
+            // Darters fan a 3-way spread.
+            for (const a of [-0.24, 0, 0.24]) {
+              this.fireEnemyShot(e, this.player.x, this.player.y, { angleY: a });
+            }
+          } else if (sk === 'heavy') {
+            // Tanks lob a slow, powerful mortar.
+            this.fireEnemyShot(e, this.player.x, this.player.y, { powerful: true, heavy: true });
+          } else {
+            this.fireEnemyShot(e, this.player.x, this.player.y);
+          }
         }
       }
 
@@ -784,7 +900,8 @@ export class Game {
         const dz = b.z - e.z;
         const r = b.radius + e.radius;
         if (dx * dx + dy * dy + dz * dz <= r * r) {
-          this.damageEnemy(e, b.damage, j);
+          if (b.isPower) this.powerDetonate(b, e, j);
+          else this.damageEnemy(e, b.damage, j);
           this.killBullet(i);
           break;
         }
@@ -802,8 +919,9 @@ export class Game {
       const dz = b.z - this.player.z;
       const r = b.radius + this.player.radius;
       if (dx * dx + dy * dy + dz * dz <= r * r) {
+        const powerful = b.powerful;
         this.killBullet(i);
-        this.damagePlayer();
+        this.damagePlayer(powerful);
         break;
       }
     }
@@ -817,7 +935,7 @@ export class Game {
       const dz = e.z - this.player.z;
       const r = e.radius + this.player.radius;
       if (dx * dx + dy * dy + dz * dz <= r * r) {
-        this.damagePlayer();
+        this.damagePlayer(isPowerfulShooter(e.kind));
         if (e.kind !== 'boss') this.killEnemy(i, true);
         break;
       }
@@ -871,6 +989,31 @@ export class Game {
     }
   }
 
+  /**
+   * POWER lance impact: full damage on the struck ship, splash damage to
+   * everything inside the blast radius.
+   */
+  private powerDetonate(b: Bullet, primary: EnemyT, primaryIndex: number): void {
+    this.explode(b.x, b.y, b.z, 1.4, 0xfff0b0);
+    this.rings.spawn({ x: b.x, y: b.y, z: b.z, life: 0.5, from: 1, to: POWER_WEAPON.aoeRadius * 1.4, color: 0xffe14d });
+    this.shake.kick(0.4);
+    this.audio.explosion(true);
+    const aoeSq = POWER_WEAPON.aoeRadius * POWER_WEAPON.aoeRadius;
+    const enemies = this.enemies.active;
+    for (let j = enemies.length - 1; j >= 0; j--) {
+      const e = enemies[j]!;
+      if (!e.alive) continue;
+      const isPrimary = e === primary;
+      const dx = e.x - b.x;
+      const dy = e.y - b.y;
+      const dz = e.z - b.z;
+      if (isPrimary || dx * dx + dy * dy + dz * dz <= aoeSq) {
+        this.damageEnemy(e, isPrimary ? POWER_WEAPON.damage : POWER_WEAPON.splashDamage, j);
+      }
+    }
+    void primaryIndex;
+  }
+
   private killEnemy(index: number, exploded: boolean): void {
     const arr = this.enemies.active;
     const e = arr[index];
@@ -899,15 +1042,25 @@ export class Game {
     this.enemies.releaseAt(index);
   }
 
-  private damagePlayer(): void {
-    if (!this.player.hit()) return; // absorbed
+  private damagePlayer(powerful = false): void {
+    const result: DamageResult = this.player.hit(powerful);
+    if (result === 'ignored') return;
+    if (result === 'absorbed') {
+      // The AEGIS guard ate the hit; powerful ones burn guard time.
+      this.audio.hit();
+      this.explode(this.player.x, this.player.y, this.player.z, 0.5, 0x59ffd8);
+      if (powerful) {
+        this.events.onToast?.(`AEGIS -${GUARD.powerfulHitPenalty}s`, 'info');
+      }
+      return;
+    }
     this.scoring.onPlayerHit();
     this.shake.kick(0.85);
     this.audio.playerHurt();
     this.explode(this.player.x, this.player.y, this.player.z, 1.1, 0x6fe8ff);
-    this.events.onToast?.(this.player.alive ? 'SHIELD HIT' : 'SHIP LOST', 'bad');
+    this.events.onToast?.(result === 'damaged' ? 'SHIELD HIT' : 'SHIP LOST', 'bad');
 
-    if (!this.player.alive) {
+    if (result === 'destroyed') {
       this.explode(this.player.x, this.player.y, this.player.z, 2.4, 0xffffff);
       this.shake.kick(1.4);
       this.audio.explosion(true);
@@ -958,6 +1111,13 @@ export class Game {
         this.shake.kick(0.5);
         this.audio.nova();
         this.events.onToast?.('NOVA OVERDRIVE', 'good');
+        break;
+      }
+      case 'aegis': {
+        this.player.activateGuard();
+        this.shake.kick(0.3);
+        this.audio.nova();
+        this.events.onToast?.(`AEGIS GUARD ${GUARD.duration}s`, 'good');
         break;
       }
     }
@@ -1035,6 +1195,14 @@ export class Game {
       waveFrac: waveProgress(this.elapsed),
       controlMode: this.lastControlMode,
       fps: this.fps,
+      powerCharges: this.player.powerCharges,
+      powerMax: POWER_WEAPON.charges,
+      powerRechargeFrac:
+        this.player.powerCharges < POWER_WEAPON.charges
+          ? this.player.powerRecharge / POWER_WEAPON.rechargeInterval
+          : 0,
+      guardTime: this.player.guard,
+      locked: this.lock !== null,
     });
   }
 
@@ -1048,6 +1216,7 @@ export class Game {
     this.renderer.syncBullets(this.bullets.active);
     this.renderer.syncEnemies(this.enemies.active, _dt);
     this.renderer.syncPickups(this.pickups.active, _dt);
+    this.renderer.syncLock(this.lock, _dt);
     this.renderer.syncParticles(this.particles, this.rings);
     this.renderer.updateEnvironment(_dt, boost);
     this.renderer.updateCamera(this.player.x, this.player.y, _dt);
@@ -1083,4 +1252,10 @@ export const colorFor = (kind: EnemyT['kind']): number =>
         : 0xb44dff;
 
 export const colorForPickup = (kind: Pickup['kind']): number =>
-  kind === 'weapon' ? 0x9dff6a : kind === 'shield' ? 0x4dc3ff : 0xffe14d;
+  kind === 'weapon'
+    ? 0x9dff6a
+    : kind === 'shield'
+      ? 0x4dc3ff
+      : kind === 'nova'
+        ? 0xffe14d
+        : 0x59ffd8;

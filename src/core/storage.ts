@@ -56,9 +56,15 @@ export interface PersistedSettings {
   autofire: boolean;
   /** 'tilt' | 'touch' | 'auto' */
   controlPreference: ControlPreference;
+  /** Which interceptor the player flies. */
+  ship: ShipId;
+  /** Auto aim-lock onto powerful opponents. */
+  aimlock: boolean;
 }
 
 export type ControlPreference = 'auto' | 'tilt' | 'touch';
+
+export type ShipId = 'vector' | 'lance' | 'bastion';
 
 export const DEFAULT_SETTINGS: PersistedSettings = {
   bloom: true,
@@ -66,6 +72,8 @@ export const DEFAULT_SETTINGS: PersistedSettings = {
   sfx: true,
   autofire: true,
   controlPreference: 'auto',
+  ship: 'vector',
+  aimlock: true,
 };
 
 export const loadSettings = (): PersistedSettings => ({
